@@ -22,8 +22,6 @@ central_direct = ((on - back) * h) / 2.
 central_average = (fdx + bdx) / 2.
 
 
-
-
 println("")
 println("***************")
 println("Forward: ", forward(g))

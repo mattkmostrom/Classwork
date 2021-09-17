@@ -12,10 +12,10 @@ rhr(f,range) = sum(f.(range[2:end])   .* step(range))
 
 println("")
 println("*************")
-println("Result from LHR is ", lhr(g))
-println("Result from RHR is ", rhr(g))
+println("Result from LHR is ", lhr(g,range))
+println("Result from RHR is ", rhr(g,range))
 
-av = (lhr(g) + rhr(g)) / 2
+av = (lhr(g,range) + rhr(g,range)) / 2
 println("Their average is ", av)
 println("")
 
