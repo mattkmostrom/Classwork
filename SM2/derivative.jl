@@ -1,35 +1,38 @@
-h = 0.1
-x0 = 3
+h = 0.0000000001 	#the stepsize
+x0 = 3. 	#the point to evaluate the derivative
+power = 2.
 
-g(x) = pi * x0
+g(x0,power) = pi * x0 ^ power
 
+#forward derivative
 on = 0.
-function forward(f)
-	xf = x0 + h
-	on = xf * pi
- 	fdx = (on - f(x0)) / h
-end
+xf = x0 + h
+on = g(xf,power)
+fdx = (on - g(x0,power)) / h
 
+
+#backward derivative
 back = 0.
-function backward(f)
-	xb = x0 - h
-	back = xb * pi
-	bdx = (f(x0) - back) / h
-end
+xb = x0 - h
+back = g(xb,power)
+bdx = (g(x0,power) - back) / h
 
-central_direct = ((on - back) * h) / 2.
 
+central_direct = ((on - back) / h) / 2.
 central_average = (fdx + bdx) / 2.
-
-
 println("")
 println("***************")
-println("Forward: ", forward(g))
-println("Backward: ", backward(g))
 
-
-ana = pi
-println("Analytical answer is: ", ana)
-diff = ((central_direct(g) - ana)/central_direct(g))
+println("Forward: ", fdx)
+println("Backward: ", bdx)
 println("")
-println("% difference is: ", diff)
+
+println("Central Direct: ", central_direct)
+println("Central Average: ", central_average)
+println("")
+
+ana = power * g( 3. , (power - 1) )
+println("Analytical answer is: ", ana)
+diff = ((central_direct - ana)/central_direct)
+println("")
+println("% difference between central methods is: ", abs(diff), "%")
