@@ -20,6 +20,7 @@ dx = (xmax - xmin) / (npts - 1)
 range = [1:dx:npts]
 println("Integration stepsize is: ", dx)
 println("")
+
 f = open("potential.dat","w")
 
 

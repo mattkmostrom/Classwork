@@ -1,4 +1,4 @@
-h = 0.0000000001 	#the stepsize
+h = 0.0001 	#the stepsize
 x0 = 3. 	#the point to evaluate the derivative
 power = 2.
 

@@ -1,3 +1,5 @@
+#using Pkg;Pkg.add("Plots");Pkg.add("PyPlot")
+
 import SpecialFunctions
 points = 500000
 ints = (points - 1) #intervals between points, the things actually being integrated over
@@ -20,7 +22,7 @@ println("Result for Exp from RHR is ", rhr(ge,range))
 
 av = (lhr(ge,range) + rhr(ge,range)) / 2
 println("Trap rule average for Exp(-2x)/x is ", av)
-exp_answer = 5.63939        #Ei(x)
+exp_answer = 5.63939        #Ei(x) wolfram
 println("Analytical Ei(x): ", exp_answer)
 println("")
 
@@ -35,13 +37,12 @@ println("Analytical Si(x): ", sin_answer, " which is close to pi/2 (1.57090)")
 println("")
 
 
-matrix = zeros(2,length(range))
-f = open("I6_exp.dat","w")
+#matrix = zeros(2,length(range))
+#f = open("I6_exp.dat","w")
+#close(f)
 
+#f = open("I6_sin.dat","w")
+#close(f)
 
-close(f)
-
-f = open("I6_sin.dat","w")
-
-
-close(f)
+#using Plots
+#plot(rhr(gs,range))

@@ -1,7 +1,7 @@
 points = 10000
 ints = (points - 1) #intervals between points, the things actually being integrated over
-x_min = 0
-x_max = 10
+x_min = 0.
+x_max = 10.
 dx = (x_max - x_min) / ints
 range = x_min:dx:x_max  # start:iteration:finish
 
