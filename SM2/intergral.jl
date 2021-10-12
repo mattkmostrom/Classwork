@@ -21,3 +21,28 @@ println("")
 
 answer = ((x_max*x_max*x_max*x_max)/4) - ((x_min*x_min*x_min*x_min)/4)
 println("Analytical answer: ", answer)
+
+
+#function lhr()    #loops expanded
+#    suml = 0
+#    x = x_min
+#    for n in 1:ints    #LHR
+#        fx = x*x
+#        suml = suml + (fx * dx)
+#        x = x + dx
+#    end
+#    return suml
+#end
+
+#function rhr()
+#    sumr = 0
+#    x = x_min + dx
+#    for n in 1:ints    #RHR
+#        fx = x*x
+#        sumr = sumr + (fx * dx)
+#        x = x + dx
+#    end
+#    return sumr
+#end
+
+
