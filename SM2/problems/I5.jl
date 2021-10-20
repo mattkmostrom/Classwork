@@ -8,7 +8,7 @@ dx = (x_max - x_min) / ints
 range = x_min:dx:x_max          # start:iteration:finish
 
 alpha = 3
-sigma = sqrt(2*alpha)
+sigma = 1 / sqrt(2*alpha)
 
 g(x) = (1 / sqrt(2 * pi * sigma ^ 2)) * exp(-alpha * (x-x0) ^ 2)            # Change your function here
 
