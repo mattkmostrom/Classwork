@@ -4,7 +4,7 @@ using DelimitedFiles
 x0 = 0
 x_min = 0
 x_max = 5
-alpha = 1
+alpha = 3
 sigma = 1 / sqrt(2 * alpha)
 println("")
 println("*******************")
@@ -20,11 +20,7 @@ lhr(f, range) = sum(f.(range[1:end-1]) .* step(range))
 rhr(f, range) = sum(f.(range[2:end]) .* step(range))
 
 
-touch("I4_error.dat")
-#open("I4_error.dat";write=true) do f
-#write(f, "dx rect_err trap_err")
-
-array_range = 1:10
+array_range = 1:1000
 err_array = zeros(Float64,length(array_range),3)
 
 for i in array_range
@@ -35,14 +31,15 @@ for i in array_range
 
     erf = SpecialFunctions.erf
     N = sqrt(pi / alpha) / 2
-    answer = (N * erf(sqrt(alpha) * x_max) - N * erf(sqrt(alpha) * (x_min))) #https://www.wolframalpha.com/input/?i=Integrate%5Bexp%28-a*x%5E2%29%5D
+    answer = N * erf(sqrt(alpha) * x_max)
+    #https://www.wolframalpha.com/input/?i=Integrate%5Bexp%28-a*x%5E2%29%5D
 
     rect_err = ((lhr(g, range) - answer) / answer) * 100
     trap_err = ((av - answer) / answer) * 100
 
-    #err_array[i][1] = dx
-    #err_array[i][2] = rect_err
-    #err_array[i][3] = trap_err
+    err_array[i,1] = dx
+    err_array[i,2] = rect_err
+    err_array[i,3] = trap_err
 
     println("dx: ",dx)
     println("rect_err: ",rect_err," %")
@@ -50,6 +47,16 @@ for i in array_range
     println("")
 end                 #i loop
 
-print(fuck)
-#writedlm(f, dx, rect_err, trap_err,delim=' ')
-#end                 #write
+#print(err_array)
+
+touch("I4_error.dat")
+outfile = "I4_error.dat"
+open(outfile, "w") do f
+  for i in err_array
+    println(f, i)
+  end
+end
+writedlm("I4_error.dat","#dx rectangle_%_error trap._%_error")
+writedlm("I4_error.dat",err_array)
+
+# cat I4_error.dat | awk '{print($1,$2)}' > rect_err.dat;cat I4_error.dat | awk '{print($1,$3)}' > trap_err.dat; xmgrace rect_err.dat trap_err.dat

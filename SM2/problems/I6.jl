@@ -36,13 +36,10 @@ sin_answer = 1.56923
 println("Analytical Si(x): ", sin_answer, " which is close to pi/2 (1.57090)")
 println("")
 
+#Plot the functions
+I6_array = zeros(Float64,1,)
 
-#matrix = zeros(2,length(range))
-#f = open("I6_exp.dat","w")
-#close(f)
+for i in range
+    
 
-#f = open("I6_sin.dat","w")
-#close(f)
-
-#using Plots
-#plot(rhr(gs,range))
+end
