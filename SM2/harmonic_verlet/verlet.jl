@@ -42,27 +42,27 @@ function harmonic(x,t)
   B = v0 / w
 
   #Euler variables
-	euler_x = 0.
-	euler_v = 0.
-	prev_euler_x = x0
-	prev_euler_v = v0
+  euler_x = 0.
+  euler_v = 0.
+  prev_euler_x = x0
+  prev_euler_v = v0
 
-	#Verlet variables
-	verlet_x = 0.
-	verlet_v = 0.
-	prev_verlet_x = x0
+  #Verlet variables
+  verlet_x = 0.
+  verlet_v = 0.
+  prev_verlet_x = x0
 
-	#velocity Verlet variables
-	prev_vel_verlet_x = 0.
-	prev_prev_verlet_x = x0
-	prev_vel_verlet_v = v0
+  #velocity Verlet variables
+  prev_vel_verlet_x = 0.
+  prev_prev_verlet_x = x0
+  prev_vel_verlet_v = v0
 
   for i in 1:npts
 
     #harmonic analytical answer ***************************************
-    harmonic_analytic = A*cos(w*time) + B*sin(w*time)
-    analytic[i,1] = time
-    analytic[i,2] = harmonic_analytic
+    	harmonic_analytic = A*cos(w*time) + B*sin(w*time)
+    	analytic[i,1] = time
+    	analytic[i,2] = harmonic_analytic
 
 		#print(time," ",euler_x," \n")
 		#flush(stdout)
@@ -105,7 +105,8 @@ end
 println("***************")
 println("Running dyanmics...")
 
-h = harmonic(x0,time)
+#h = harmonic(x0,time)
+harmonic(x0,time)
 
 println("... Done!\n")
 println("Writing harmonic results to 'analytic.dat'...")
