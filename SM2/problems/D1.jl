@@ -1,11 +1,11 @@
 h = 0.0001 	#the stepsize
-x = 3. 	#the point to evaluate the derivative
-power = 2.
-alpha = 7
-sigma = sqrt(2*alpha)
+x = 0.2 	#the point to evaluate the derivative
 
+alpha = 5.
+sigma = 1 / sqrt(2 * alpha)
 g(x) = (1 / sqrt(2 * pi * sigma ^ 2)) * exp(-alpha * (x) ^ 2)
 
+#power = 2.
 #g(x0,power) = pi * x0 ^ power
 
 #forward derivative

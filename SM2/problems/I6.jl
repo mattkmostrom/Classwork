@@ -1,7 +1,7 @@
 #using Pkg;Pkg.add("Plots");Pkg.add("PyPlot")
 using DelimitedFiles
 import SpecialFunctions
-points = 50
+points = 507000
 ints = (points - 1) #intervals between points, the things actually being integrated over
 x_min = 0.001
 x_max = 1000.            #the error seems to go up with how big you make x_max

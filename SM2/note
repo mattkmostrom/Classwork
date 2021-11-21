@@ -1,0 +1,5 @@
+so in the MD code we use box-Mueller method to turn rand# --> Gaussian. 
+V2x=COS(TWOPI*V2x)
+V1x=SQRT(-2.*LOG(V1x)) 
+       GRANx=V1x*V2x
+Doesn't V1x need to be 0<v1x<1 so as not to cause a sqrt(negative #)?
