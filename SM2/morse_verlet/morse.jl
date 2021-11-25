@@ -8,10 +8,10 @@ println("________________________\n\n")
 println("Morse Potential MD v0.2\n")
 
 global nsteps = 2000       #number of integration points
-global dt = 0.0001         #timestep size
-global n = 3                     #number of atoms to be simulated
-T = 10
-dx = 4.                   #spacing between adjacent atoms in cube
+global dt = 0.01         #timestep size
+global n = 2                     #number of atoms to be simulated
+T = 20
+dx = 7.                   #spacing between adjacent atoms in cube
 println("Number of steps: ", nsteps)
 println("Timestep size: ",dt)
 println("")
@@ -32,7 +32,7 @@ end
 
 #He(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("He",mass,eps,sigma,w,x0,pos,vel,acc,acc_old)
 #Ar(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("Ar",39.95,128.326802,3.371914,1,x0,pos,vel,acc,acc_old) #define some atom parameters
-Ar(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("Ar",39.95,1,1,1,x0,pos,vel,acc,acc_old) #define some atom parameters
+Ar(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("Ar",39.95,50,3,1,x0,pos,vel,acc,acc_old) #define some atom parameters
 
 
 #****************************
@@ -44,7 +44,7 @@ for i in 1:n    #Make a cubic lattice
     for k in 1:n
       x0 = [i,j,k] .* dx
       #atom = Ar([i,j,k] .* dx,[i,j,k] .* dx,rand(3),zeros(3),zeros(3))
-      atom = Ar(x0,x0,rand(3),zeros(3),zeros(3)) #Ar is a function of 5 vectors: x0,pos,vel,acc,acc_old
+      atom = Ar(x0,x0,zeros(3),zeros(3),zeros(3)) #Ar is a function of 5 vectors: x0,pos,vel,acc,acc_old
       push!(atoms,atom)
     end #i
   end   #j
@@ -56,9 +56,9 @@ end     #k
 function gaussify(atoms,target_temp)
   itemp = 0
   for i in 1:length(atoms)
-    atoms[i].vel[1] -= 0.5
-    atoms[i].vel[2] -= 0.5
-    atoms[i].vel[3] -= 0.5
+    atoms[i].vel[1] #-= 0.5
+    atoms[i].vel[2] #-= 0.5
+    atoms[i].vel[3] #-= 0.5
     itemp += atoms[i].mass * dot(atoms[i].vel,atoms[i].vel)
   end
 
@@ -68,7 +68,7 @@ function gaussify(atoms,target_temp)
   end
 end
 
-function com()
+function com(atoms)
       sumvx= 0.
       sumvy= 0.
       sumvz= 0.
@@ -78,21 +78,18 @@ function com()
         sumvz=atoms[i].vel[3]+sumvz
       end
 
-#       calculate the center of mass velocity
-       sumvx=sumvx/length(atoms)
-       sumvy=sumvy/length(atoms)
-       sumvz=sumvz/length(atoms)
+      #calculate the center of mass velocity
+      sumvx=sumvx/length(atoms)
+      sumvy=sumvy/length(atoms)
+      sumvz=sumvz/length(atoms)
 
-#       subtract off the center of mass velocity
-       for i in 1:length(atoms)
+       #subtract off the center of mass velocity
+      for i in 1:length(atoms)
          atoms[i].vel[1]=atoms[i].vel[1]-sumvx
          atoms[i].vel[2]=atoms[i].vel[2]-sumvy
          atoms[i].vel[3]=atoms[i].vel[3]-sumvz
       end
 end
-
-
-
 
 #****************************
 #Calculate forces (update potentials)
@@ -103,28 +100,32 @@ function forces(atoms)      #calculate forces
       if atoms[i] != atoms[j]
         dx = atoms[i].pos - atoms[j].pos
         r = sqrt(dot(dx,dx))
-        #println("dx: ",dx)
         dx = dx / r
-        #println("r: ",r)
-        #println("dx2: ",dx)
 
         #Lennard-Jones
         #force = 24. * atoms[i].eps / (r ^ 2) * ( 2 * (atoms[i].sig / r) ^ 12 - (atoms[i].sig / r)^6 )
 
         #FIXME: write if statement to choose potential type
+        #FIXME: Morse potential causes drift in positive r direction
 
         #Morse
         D = atoms[i].eps
         dr = r - atoms[i].sig
-        alpha = 10                  #well width. bigger alpha means gentler sloped well. "bond stiffness"
+        alpha = 1                  #well width. bigger alpha means gentler sloped well. "bond stiffness"
         expar = exp(- alpha * dr)
-        pot = D * (1.0 - expar) * (1.0 - expar)
-        dudr = 2.0 * D * alpha * expar * (1.0 - expar)
+        dudr = 2.0 * D * alpha * expar * (1.0 - expar)   #U = D * (1.0 - expar) * (1.0 - expar)
         force = (dudr / r) * dx
-        #println("acceleration: ",atoms[i].acc)
-        #println("force: ",force)
+        #println("r: ",r)
+        #println("dudr: ",dudr)
+        #println("dx: ",dx)
+
+        #atoms[i].acc += force .* dx / atoms[i].mass      #from preston's code. Wrong units?
+        atoms[i].acc += force / atoms[i].mass             #a = F/m
+
+
+        #println("acceleration of atom ",i,": ",atoms[i].acc)
         #println("")
-        atoms[i].acc += force .* dx / atoms[i].mass
+
       end
     end
   end
@@ -176,7 +177,9 @@ println("")
 println("***************")
 println("Running dynamics...")
 gaussify(atoms,T)
+com(atoms)
 forces(atoms)
+
 
 #****************************
 #Run the dynamics
