@@ -31,8 +31,8 @@ mutable struct Element      #Make classes a thing in julia
 end
 
 #He(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("He",mass,eps,sigma,w,x0,pos,vel,acc,acc_old)
-Ar(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("Ar",39.95,128.326802,3.371914,1,x0,pos,vel,acc,acc_old) #define some atom parameters
-#Ar(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("Ar",39.95,10,3.371914,1,x0,pos,vel,acc,acc_old) #define some atom parameters
+#Ar(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("Ar",39.95,128.326802,3.371914,1,x0,pos,vel,acc,acc_old) #define some atom parameters
+Ar(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("Ar",39.95,1,1,1,x0,pos,vel,acc,acc_old) #define some atom parameters
 
 
 #****************************
@@ -67,6 +67,32 @@ function gaussify(atoms,target_temp)
     atoms[i].vel *= sqrt(target_temp/itemp)
   end
 end
+
+function com()
+      sumvx= 0.
+      sumvy= 0.
+      sumvz= 0.
+      for i in 1:length(atoms)
+        sumvx=atoms[i].vel[1]+sumvx
+        sumvy=atoms[i].vel[2]+sumvy
+        sumvz=atoms[i].vel[3]+sumvz
+      end
+
+#       calculate the center of mass velocity
+       sumvx=sumvx/length(atoms)
+       sumvy=sumvy/length(atoms)
+       sumvz=sumvz/length(atoms)
+
+#       subtract off the center of mass velocity
+       for i in 1:length(atoms)
+         atoms[i].vel[1]=atoms[i].vel[1]-sumvx
+         atoms[i].vel[2]=atoms[i].vel[2]-sumvy
+         atoms[i].vel[3]=atoms[i].vel[3]-sumvz
+      end
+end
+
+
+
 
 #****************************
 #Calculate forces (update potentials)
