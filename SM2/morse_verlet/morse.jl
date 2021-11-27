@@ -1,5 +1,7 @@
 #To do:
 #1.) Make a box
+#2.) Check that atoms don't move if force=0
+#3.) Check that atoms accelerate away if force = constant
 import SpecialFunctions
 using LinearAlgebra
 using Printf
@@ -7,11 +9,12 @@ using DelimitedFiles
 println("________________________\n\n")
 println("Morse Potential MD v0.2\n")
 
-global nsteps = 2000       #number of integration points
-global dt = 0.01         #timestep size
-global n = 2                     #number of atoms to be simulated
-T = 20
-dx = 7.                   #spacing between adjacent atoms in cube
+global nsteps = 300       #number of integration points
+global cell = 10
+global dt = 0.001         #timestep size
+global n = 2              #number of atoms to be simulated
+T = 3
+dx = 3.1                   #spacing between adjacent atoms in cube
 println("Number of steps: ", nsteps)
 println("Timestep size: ",dt)
 println("")
@@ -29,6 +32,7 @@ mutable struct Element      #Make classes a thing in julia
     acc::Vector{<:Real}
     acc_old::Vector{<:Real}
 end
+#alpha = 1                  #well width. bigger alpha means gentler sloped well. "bond stiffness"
 
 #He(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("He",mass,eps,sigma,w,x0,pos,vel,acc,acc_old)
 #Ar(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("Ar",39.95,128.326802,3.371914,1,x0,pos,vel,acc,acc_old) #define some atom parameters
@@ -44,7 +48,7 @@ for i in 1:n    #Make a cubic lattice
     for k in 1:n
       x0 = [i,j,k] .* dx
       #atom = Ar([i,j,k] .* dx,[i,j,k] .* dx,rand(3),zeros(3),zeros(3))
-      atom = Ar(x0,x0,zeros(3),zeros(3),zeros(3)) #Ar is a function of 5 vectors: x0,pos,vel,acc,acc_old
+      atom = Ar(x0,x0,rand(3),zeros(3),zeros(3)) #Ar is a function of 5 vectors: x0,pos,vel,acc,acc_old
       push!(atoms,atom)
     end #i
   end   #j
@@ -56,9 +60,9 @@ end     #k
 function gaussify(atoms,target_temp)
   itemp = 0
   for i in 1:length(atoms)
-    atoms[i].vel[1] #-= 0.5
-    atoms[i].vel[2] #-= 0.5
-    atoms[i].vel[3] #-= 0.5
+    atoms[i].vel[1] -= 0.5
+    atoms[i].vel[2] -= 0.5
+    atoms[i].vel[3] -= 0.5
     itemp += atoms[i].mass * dot(atoms[i].vel,atoms[i].vel)
   end
 
@@ -68,6 +72,9 @@ function gaussify(atoms,target_temp)
   end
 end
 
+#****************************
+#Take out Center of Mass velocities
+#****************************
 function com(atoms)
       sumvx= 0.
       sumvy= 0.
@@ -98,36 +105,78 @@ function forces(atoms)      #calculate forces
   for i in 1:length(atoms)
     for j in 1:length(atoms)
       if atoms[i] != atoms[j]
+
+        dx = atoms[i].pos[1] - atoms[j].pos[1]
+        dy = atoms[i].pos[2] - atoms[j].pos[2]
+        dz = atoms[i].pos[3] - atoms[j].pos[3]
+
+        dx = dx - round(Int64,(dx/cell))*cell
+        dy = dy - round(Int64,(dy/cell))*cell
+        dx = dz - round(Int64,(dz/cell))*cell
+
+        rx = dot(dx,dx)
+        ry = dot(dy,dy)
+        rz = dot(dz,dz)
+        r = sqrt(rx + ry + rz)
+
+        dx = dx / r
+        dy = dy / r
+        dz = dz / r
+
+        #Lennard-Jones
+        #sig_r = atoms[i].sig / r
+        #U = 4 * atoms[i].eps * (((sig_r)^12)-((sig_r)^6))
+        #force = 24. * atoms[i].eps / (r ^ 2) * ( 2 * (atoms[i].sig / r) ^ 12 - (atoms[i].sig / r)^6 )
+
+        #FIXME: write if statement to choose potential type
+
+        #Morse
+        D = atoms[i].eps
+        dr = r - atoms[i].sig
+        expar = exp(- atoms[i].w * dr)
+        U = D * (1.0 - expar) * (1.0 - expar)
+        dudr = 2.0 * D * atoms[i].w * expar * (1.0 - expar)   #U = D * (1.0 - expar) * (1.0 - expar)
+        force = (dudr / r) * dx
+
+        atoms[i].acc += force / atoms[i].mass             #a = F/m
+      end
+    end
+  end
+end
+
+function get_energy(atoms)
+  total_vel = 0
+  global energy = 0
+  for i in 1:length(atoms)
+    for j in 1:length(atoms)
+      if atoms[i] != atoms[j]
         dx = atoms[i].pos - atoms[j].pos
         r = sqrt(dot(dx,dx))
         dx = dx / r
 
         #Lennard-Jones
-        #force = 24. * atoms[i].eps / (r ^ 2) * ( 2 * (atoms[i].sig / r) ^ 12 - (atoms[i].sig / r)^6 )
+        #sig_r = atoms[i].sig / r
+        #U = 4 * atoms[i].eps * (((sig_r)^12)-((sig_r)^6))
 
         #FIXME: write if statement to choose potential type
-        #FIXME: Morse potential causes drift in positive r direction
 
         #Morse
         D = atoms[i].eps
         dr = r - atoms[i].sig
         alpha = 1                  #well width. bigger alpha means gentler sloped well. "bond stiffness"
         expar = exp(- alpha * dr)
-        dudr = 2.0 * D * alpha * expar * (1.0 - expar)   #U = D * (1.0 - expar) * (1.0 - expar)
-        force = (dudr / r) * dx
-        #println("r: ",r)
-        #println("dudr: ",dudr)
-        #println("dx: ",dx)
+        U = D * (1.0 - expar) * (1.0 - expar)
 
-        #atoms[i].acc += force .* dx / atoms[i].mass      #from preston's code. Wrong units?
-        atoms[i].acc += force / atoms[i].mass             #a = F/m
+        for x in 1:3
+          total_vel = sum((atoms[i].vel[x])^2)
+        end
 
+        KE = sum(atoms[i].mass * total_vel) / n^3
 
-        #println("acceleration of atom ",i,": ",atoms[i].acc)
-        #println("")
-
+        energy = KE + U
       end
     end
+    return energy
   end
 end
 
@@ -187,6 +236,8 @@ forces(atoms)
 for q in 1:nsteps
   integrate(atoms,dt)
   println("Steps completed:",q,"/",nsteps)
+  get_energy(atoms)
+  println("Energy: ",energy)
   write_output(traj)
 end
 
