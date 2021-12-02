@@ -10,11 +10,10 @@ println("________________________\n\n")
 println("Morse Potential MD v0.9\n")
 
 global kb = 1.38064852e-23
-global nsteps = 1500                #number of integration points
-global dt = 0.01                    #timestep size
+global nsteps = 4000                #number of integration points
+global dt = 0.1                    #timestep size
 global n = 3                        #cube root of the number of atoms to be simulated
-global dx = 8.                      #spacing between adjacent atoms in cube
-
+global dx = 4.                      #spacing between adjacent atoms in cube
 
 println("Number of steps: ", nsteps)
 println("Timestep size: ",dt)
@@ -23,20 +22,25 @@ println("")
 #****************************
 #Make the units correct
 #****************************
-Tstar = 0.02                 #Temperature
+Tstar = 100.0                 #Temperature
 rhostar = 0.6               #density
 massstar = 32.              #twisting your mind and smashing your dreams
-eps = 1280.                  #well-depth
-sig = 3.405                 #place where E = 0, NOT x corresponding to bottom of well
-w = 1.                      #arbitrary potential-specific parameter; harmonic freq, morse alpha, etc
+eps = 128.326802            #well-depth
+sig = 3.371914              #place where E = 0, NOT x corresponding to bottom of well
+w = 3.                      #arbitrary potential-specific parameter; harmonic freq, morse alpha, etc
 
 T = Tstar * (kb/eps)
 mass = massstar * (10. / (6.022169 * 1.380662))
-rho = rhostar * (sig)^3
+rho = rhostar / (sig)^3
 #force = force * (atoms[1].sig/atoms[1].eps)
 
-cell = 0.                           #Cell size
-cell = (n ^ 3 / rho) ^ (1. / 3.)    #reduced units
+
+cell = 15.                           #Cell size
+#cell = (n ^ 3 / rho) ^ (1. / 3.)    #reduced units
+global cutoff = cell/2              #how far atoms can see each other
+
+
+@printf("Reduced Density: %f\nReduced Cell size: %f",rho,cell)
 
 
 mutable struct Element      #Make classes a thing in julia
@@ -73,15 +77,12 @@ for i in 1:n
 end     #k
 
 
-
-
-
 #****************************
 #Make the velocities gaussian
 #****************************
 function temper(atoms,target_temp)
   for i in 1:length(atoms)
-      atoms[i].vel += randn(3)
+      atoms[i].vel .+= rand(3)
   end
 
   itemp = 0
@@ -130,10 +131,10 @@ end
 #****************************
 #Calculate forces (update potentials)
 #****************************
-function forces(atoms)      #calculate forces
-  force = [0.,0.,0.]
+function forces(atoms,cutoff)
+  force = [0.,0.,0.]               #initialize forces, might as well make them zero floats
 
-  for i in 1:length(atoms)
+  for i in 1:length(atoms)         #zero out accelerations
     atoms[i].acc = zeros(3)
   end
 
@@ -142,38 +143,53 @@ function forces(atoms)      #calculate forces
       #if i < j
       if atoms[i] != atoms[j]   #should this be i < j?
 
-        d_pos = atoms[i].pos - atoms[j].pos    #Float64 #[dx,dy,dz]
-        d_pos = d_pos - (round.(Int64,( d_pos / cell )) * cell)      #[dx,dy,dz] - (Int64 * Float64)
+        d_pos = atoms[i].pos - atoms[j].pos    #[dx,dy,dz], Float64
+        dr = sqrt(dot(d_pos,d_pos))     #sqrt(dx^2 + dy^2 + dz^2), Float64
 
-        dr = sqrt(dot(d_pos,d_pos))     #sqrt(dx^2 + dy^2 + dz^2)   Float64
-        d_pos = d_pos/dr                #[dx/dr, dy/dr , dz/dr]
+        for d in 1:3              #Periodic Boundaries
+          if(d_pos[d] > (cell/2))
+            atoms[i].pos[d] -= cell
 
-        #******************************
-        #Lennard-Jones
-        #******************************
-#        force = 24. * atoms[i].eps / (r ^ 2) * ( 2 * (atoms[i].sig / r) ^ 12 - (atoms[i].sig / r)^6 )
+          elseif(d_pos[d] <= (cell/2))
+            atoms[i].pos[d] += cell
+          end
+        end
 
-#        FIXME: write if statement to choose potential type
+        if(dr<cutoff)
 
-        #******************************
-        #Morse
-        #******************************
-        D = atoms[i].eps
-        alpha = 1.                  #well width. bigger alpha means gentler sloped well. "bond stiffness"
-        expar = exp(- alpha .* (dr .- atoms[i].sig))       #need to use dx_x0?
-        dudr = (2.0 * D * alpha) .* expar .* (1.0 - expar)   #U = D * (1.0 - expar) * (1.0 - expar)
+          #d_pos = d_pos - (round.(Int64,( d_pos / cell )) * cell)      #[dx,dy,dz] - (Int64 * Float64)
 
-        force[1] = (-dudr) * (d_pos[1]/dr)    #(dU/dr)*(dr/dx)
-        force[2] = (-dudr) * (d_pos[2]/dr)
-        force[3] = (-dudr) * (d_pos[3]/dr)
+          d_pos = d_pos/dr                #[dx/dr, dy/dr , dz/dr]
 
-        force = force .* (atoms[1].sig/atoms[1].eps)
+          #******************************
+          #Lennard-Jones
+          #******************************
+#         force = 24. * atoms[i].eps / (r ^ 2) * ( 2 * (atoms[i].sig / r) ^ 12 - (atoms[i].sig / r)^6 )
 
-        atoms[i].acc += force / atoms[i].mass             #a = F/m
+#         FIXME: write if statement to choose potential type
+
+          #******************************
+          #Morse
+          #******************************
+          D = atoms[i].eps
+          expar = exp(- atoms[i].w .* (dr .- atoms[i].sig))       #w = well width. bigger alpha means gentler sloped well. "bond stiffness"
+          dudr = (2.0 * D * atoms[i].w) .* expar .* (1.0 - expar)   #U = D * (1.0 - expar) ^ 2
+
+          force[1] = (-dudr) * (d_pos[1]/dr)    #(dU/dr)*(dr/dx)
+          force[2] = (-dudr) * (d_pos[2]/dr)
+          force[3] = (-dudr) * (d_pos[3]/dr)
+          force = force .* (atoms[1].sig/atoms[1].eps)        #force in reduced units
+
+      else(dr > cutoff)
+          force = [0.,0.,0.]
+
       end
-    end
-  end
-end
+
+        atoms[i].acc .+= force / atoms[i].mass             #a = F/m
+      end       #if i != j
+    end         #j
+  end           #i
+end             #forces()
 
 
 function get_energy(atoms)
@@ -214,38 +230,44 @@ function get_energy(atoms)
 end
 
 function integrate(atoms,dt)
-  global traj = zeros(Float64,size(atoms,1),3)
   for j in 1:length(atoms)
   #for j in 1:size(atoms,1)
-    traj[j,1] = atoms[j].pos[1]
-    traj[j,2] = atoms[j].pos[2]
-    traj[j,3] = atoms[j].pos[3]
 
     atoms[j].pos = atoms[j].pos .+ atoms[j].vel * dt .+ (0.5 .* atoms[j].acc * (dt^2.))   #Integrate
     atoms[j].acc_old = atoms[j].acc
 
-    forces(atoms)         #Calculate forces
+    forces(atoms,cutoff)         #Calculate forces
 
     atoms[j].vel = atoms[j].vel .+ (0.5 .* (atoms[j].acc + atoms[j].acc_old) * dt)  #Update velocities
   end
-  return traj
 end
 
 
 #****************************
 #Write trajectories
 #****************************
-function write_output(traj)
+function write_pos(atoms)
   natoms = n^3
-#  natoms = Int.(float_natoms)
   outfile = "traj.xyz"
   open(outfile, "a") do f
     @printf(f,"%i\n\n",natoms)
-    for i in 1:size(traj, 1)
-      @printf(f,"%s %lf %lf %lf\n","Ar",traj[i,1],traj[i,2],traj[i,3])
+    for i in 1:size(atoms, 1)
+      @printf(f,"%s %lf %lf %lf\n","Ar",atoms[i].pos[1],atoms[i].pos[2],atoms[i].pos[3])
     end
   end
 end
+
+function write_vel(atoms)
+  natoms = n^3
+  outfile = "vel.dat"
+  open(outfile, "a") do f
+    @printf(f,"%i\n\n",natoms)
+    for i in 1:size(atoms, 1)
+      @printf(f,"%s %lf %lf %lf\n","Ar",atoms[i].vel[1],atoms[i].vel[2],atoms[i].vel[3])
+    end
+  end
+end
+
 
 #****************************
 #Initialize some stuff
@@ -253,9 +275,14 @@ end
 println("")
 println("***************")
 println("Running dynamics...")
+
 temper(atoms,T)
-#com(atoms)
-forces(atoms)
+println("Temperature: ",T)
+println("")
+
+com(atoms)
+forces(atoms,cutoff)        #give a value to old acceleration in integration loop
+rm("traj.xyz")
 
 
 #****************************
@@ -263,12 +290,14 @@ forces(atoms)
 #****************************
 for q in 1:nsteps
   integrate(atoms,dt)
-  println("Steps completed:",q,"/",nsteps)
   get_energy(atoms)
-  println("Energy: ",energy)
-  write_output(traj)
+  write_pos(atoms)
+  write_vel(atoms)
+  println("Steps completed:",q,"/",nsteps,", Energy: ",energy)
 end
 
 println("")
 println("Done!\n")
+println("")
+println("Position trajectory is in 'traj.xyz', velocity trajectory is in 'vel.dat'.")
 println("")
