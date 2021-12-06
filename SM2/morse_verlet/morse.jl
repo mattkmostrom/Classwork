@@ -1,8 +1,6 @@
 #To do:
 #1.) Make a box
-#2.) Check that atoms don't move if force=0
-#3.) Check that atoms accelerate away if force = constant
-import SpecialFunctions
+using SpecialFunctions
 using LinearAlgebra
 using Printf
 using DelimitedFiles
@@ -10,11 +8,11 @@ println("________________________\n\n")
 println("Morse Potential MD v0.9\n")
 
 global kb = 1.38064852e-23
-global nsteps = 4000                #number of integration points
+global nsteps = 2000                #number of integration points
 global dt = 0.1                    #timestep size
 global n = 3                        #cube root of the number of atoms to be simulated
-global dx = 4.                      #spacing between adjacent atoms in cube
-
+global dx = 3.0                      #spacing between adjacent atoms in cube
+global origin = [0.,0.,0.]
 println("Number of steps: ", nsteps)
 println("Timestep size: ",dt)
 println("")
@@ -22,7 +20,7 @@ println("")
 #****************************
 #Make the units correct
 #****************************
-Tstar = 100.0                 #Temperature
+Tstar = 10.0                 #Temperature
 rhostar = 0.6               #density
 massstar = 32.              #twisting your mind and smashing your dreams
 eps = 128.326802            #well-depth
@@ -36,7 +34,7 @@ rho = rhostar / (sig)^3
 
 
 cell = 15.                           #Cell size
-#cell = (n ^ 3 / rho) ^ (1. / 3.)    #reduced units
+cell = (n ^ 3 / rho) ^ (1. / 3.)    #reduced units
 global cutoff = cell/2              #how far atoms can see each other
 
 
@@ -147,26 +145,23 @@ function forces(atoms,cutoff)
         dr = sqrt(dot(d_pos,d_pos))     #sqrt(dx^2 + dy^2 + dz^2), Float64
 
         for d in 1:3              #Periodic Boundaries
-          if(d_pos[d] > (cell/2))
+          if(atoms[i].pos[d] > (cell/2))
             atoms[i].pos[d] -= cell
 
-          elseif(d_pos[d] <= (cell/2))
+          elseif(atoms[i].pos[d] <= (cell/2))
             atoms[i].pos[d] += cell
           end
         end
 
         if(dr<cutoff)
 
-          #d_pos = d_pos - (round.(Int64,( d_pos / cell )) * cell)      #[dx,dy,dz] - (Int64 * Float64)
-
           d_pos = d_pos/dr                #[dx/dr, dy/dr , dz/dr]
 
+#         FIXME: write if statement to choose potential type
           #******************************
           #Lennard-Jones
           #******************************
 #         force = 24. * atoms[i].eps / (r ^ 2) * ( 2 * (atoms[i].sig / r) ^ 12 - (atoms[i].sig / r)^6 )
-
-#         FIXME: write if statement to choose potential type
 
           #******************************
           #Morse
@@ -193,8 +188,8 @@ end             #forces()
 
 
 function get_energy(atoms)
-  total_vel = 0
-  global energy = 0
+  global energy = 0.0
+
   for i in 1:size(atoms,1)
     for j in 1:size(atoms,1)
       if atoms[i] != atoms[j]
@@ -216,13 +211,18 @@ function get_energy(atoms)
         expar = exp(- alpha * dr)
         U = D * (1.0 - expar) * (1.0 - expar)
 
+        total_vel = 0.0
+        summ = 0.0
+
         for x in 1:3
-          total_vel = sum((atoms[i].vel[x])^2)
+          total_vel += (atoms[i].vel[x])^2
         end
 
         KE = sum(atoms[i].mass * total_vel) / n^3
 
-        energy = KE + U
+        summ = KE + U
+        energy += summ
+
       end
     end
     return energy
@@ -294,6 +294,7 @@ for q in 1:nsteps
   write_pos(atoms)
   write_vel(atoms)
   println("Steps completed:",q,"/",nsteps,", Energy: ",energy)
+  #println("Steps completed:",q,"/",nsteps)
 end
 
 println("")
