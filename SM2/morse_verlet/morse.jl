@@ -20,12 +20,13 @@ println("")
 #****************************
 #Make the units correct
 #****************************
-Tstar = 10.0                 #Temperature
+Tstar = 300.0                 #Temperature
 rhostar = 0.6               #density
 massstar = 32.              #twisting your mind and smashing your dreams
 eps = 128.326802            #well-depth
 sig = 3.371914              #place where E = 0, NOT x corresponding to bottom of well
 w = 3.                      #arbitrary potential-specific parameter; harmonic freq, morse alpha, etc
+                            #alpha is well width. bigger alpha means gentler sloped well. "bond stiffness"
 
 T = Tstar * (kb/eps)
 mass = massstar * (10. / (6.022169 * 1.380662))
@@ -52,8 +53,7 @@ mutable struct Element      #Make classes a thing in julia
     vel::Vector{<:Real}
     acc::Vector{<:Real}
     acc_old::Vector{<:Real}
-end#Cell size
-#alpha = 1                  #well width. bigger alpha means gentler sloped well. "bond stiffness"
+end
 
 #He(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("He",mass,eps,sigma,w,x0,pos,vel,acc,acc_old)
 #Ar(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("Ar",39.95,128.326802,3.371914,1,x0,pos,vel,acc,acc_old) #LJ UFF atom parameters
@@ -78,7 +78,7 @@ end     #k
 #****************************
 #Make the velocities gaussian
 #****************************
-function temper(atoms,target_temp)
+function init_temper(atoms,target_temp)
   for i in 1:length(atoms)
       atoms[i].vel .+= rand(3)
   end
@@ -97,6 +97,20 @@ function temper(atoms,target_temp)
   end
 end
 
+#****************************
+#Rescale velocities for thermostat
+#****************************
+function temper(atoms,target_temp)
+    itemp = 0
+  for i in 1:size(atoms,1)
+    itemp += atoms[i].mass * dot(atoms[i].vel,atoms[i].vel)
+  end
+
+  itemp /= 3 * size(atoms,1) - 3      #Need to comment out the '-3' if there's only 1 atom
+  for i in 1:size(atoms,1)
+    atoms[i].vel *= sqrt(target_temp/itemp)
+  end
+end
 
 #****************************
 #Take out Center of Mass velocities
@@ -229,6 +243,9 @@ function get_energy(atoms)
   end
 end
 
+#****************************
+#Integrate the positions and update the velocities
+#****************************
 function integrate(atoms,dt)
   for j in 1:length(atoms)
   #for j in 1:size(atoms,1)
@@ -276,7 +293,7 @@ println("")
 println("***************")
 println("Running dynamics...")
 
-temper(atoms,T)
+init_temper(atoms,T)
 println("Temperature: ",T)
 println("")
 
@@ -290,6 +307,7 @@ rm("traj.xyz")
 #****************************
 for q in 1:nsteps
   integrate(atoms,dt)
+  temper(atoms,T)
   get_energy(atoms)
   write_pos(atoms)
   write_vel(atoms)
