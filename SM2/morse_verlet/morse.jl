@@ -9,7 +9,7 @@ println("Morse Potential MD v0.9\n")
 
 global kb = 1.38064852e-23
 global nsteps = 2000                #number of integration points
-global dt = 0.1                    #timestep size
+global dt = 0.001                    #timestep size
 global n = 3                        #cube root of the number of atoms to be simulated
 global dx = 3.0                      #spacing between adjacent atoms in cube
 global origin = [0.,0.,0.]
@@ -20,15 +20,15 @@ println("")
 #****************************
 #Make the units correct
 #****************************
-Tstar = 300.0                 #Temperature
+Tstar = 1.0                 #Temperature
 rhostar = 0.6               #density
 massstar = 32.              #twisting your mind and smashing your dreams
-eps = 128.326802            #well-depth
+eps = 128.326802            #well-depth; this is in units of eps/kb, so T will just be Tstar * eps
 sig = 3.371914              #place where E = 0, NOT x corresponding to bottom of well
 w = 3.                      #arbitrary potential-specific parameter; harmonic freq, morse alpha, etc
                             #alpha is well width. bigger alpha means gentler sloped well. "bond stiffness"
 
-T = Tstar * (kb/eps)
+T = Tstar * eps
 mass = massstar * (10. / (6.022169 * 1.380662))
 rho = rhostar / (sig)^3
 #force = force * (atoms[1].sig/atoms[1].eps)
@@ -145,8 +145,7 @@ end
 #****************************
 function forces(atoms,cutoff)
   force = [0.,0.,0.]               #initialize forces, might as well make them zero floats
-
-  for i in 1:length(atoms)         #zero out accelerations
+  for i in 1:size(atoms,1)         #zero out accelerations
     atoms[i].acc = zeros(3)
   end
 
@@ -162,7 +161,7 @@ function forces(atoms,cutoff)
           if(atoms[i].pos[d] > (cell/2))
             atoms[i].pos[d] -= cell
 
-          elseif(atoms[i].pos[d] <= (cell/2))
+          elseif(atoms[i].pos[d] <= (cell/2)) #should be negative?
             atoms[i].pos[d] += cell
           end
         end
@@ -175,7 +174,7 @@ function forces(atoms,cutoff)
           #******************************
           #Lennard-Jones
           #******************************
-#         force = 24. * atoms[i].eps / (r ^ 2) * ( 2 * (atoms[i].sig / r) ^ 12 - (atoms[i].sig / r)^6 )
+#         dudr = 24. * atoms[i].eps / (r ^ 2) * ( 2 * (atoms[i].sig / r) ^ 12 - (atoms[i].sig / r)^6 )
 
           #******************************
           #Morse
@@ -194,7 +193,7 @@ function forces(atoms,cutoff)
 
       end
 
-        atoms[i].acc .+= force / atoms[i].mass             #a = F/m
+        atoms[i].acc += force / atoms[i].mass             #a = F/m
       end       #if i != j
     end         #j
   end           #i
