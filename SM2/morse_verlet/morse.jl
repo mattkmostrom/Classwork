@@ -4,13 +4,16 @@ using SpecialFunctions
 using LinearAlgebra
 using Printf
 using DelimitedFiles
+using Distributions
+using Plots
+
 println("________________________\n\n")
 println("Morse Potential MD v0.9\n")
 
 global kb = 1.38064852e-23
-global nsteps = 2000                #number of integration points
-global dt = 0.001                    #timestep size
-global n = 3                        #cube root of the number of atoms to be simulated
+global nsteps = 700                #number of integration points
+global dt = 0.05                    #timestep size
+global n = 5                        #cube root of the number of atoms to be simulated
 global dx = 3.0                      #spacing between adjacent atoms in cube
 global origin = [0.,0.,0.]
 println("Number of steps: ", nsteps)
@@ -20,21 +23,19 @@ println("")
 #****************************
 #Make the units correct
 #****************************
-Tstar = 1.0                 #Temperature
+Tstar = 0.1                 #Temperature
 rhostar = 0.6               #density
 massstar = 32.              #twisting your mind and smashing your dreams
 eps = 128.326802            #well-depth; this is in units of eps/kb, so T will just be Tstar * eps
 sig = 3.371914              #place where E = 0, NOT x corresponding to bottom of well
-w = 3.                      #arbitrary potential-specific parameter; harmonic freq, morse alpha, etc
-                            #alpha is well width. bigger alpha means gentler sloped well. "bond stiffness"
+w = 3.                      #arbitrary potential-specific parameter; harmonic freq, morse alpha, etc #alpha is well width. bigger alpha means gentler sloped well. "bond stiffness"
 
 T = Tstar * eps
 mass = massstar * (10. / (6.022169 * 1.380662))
 rho = rhostar / (sig)^3
-#force = force * (atoms[1].sig/atoms[1].eps)
 
 
-cell = 15.                           #Cell size
+#cell = 15.                         #Cell size
 cell = (n ^ 3 / rho) ^ (1. / 3.)    #reduced units
 global cutoff = cell/2              #how far atoms can see each other
 
@@ -190,11 +191,9 @@ function forces(atoms,cutoff)
 
       else(dr > cutoff)
           force = [0.,0.,0.]
+        end
+      end       #if i!=j
 
-      end
-
-        atoms[i].acc += force / atoms[i].mass             #a = F/m
-      end       #if i != j
     end         #j
   end           #i
 end             #forces()
@@ -256,6 +255,7 @@ function integrate(atoms,dt)
 
     atoms[j].vel = atoms[j].vel .+ (0.5 .* (atoms[j].acc + atoms[j].acc_old) * dt)  #Update velocities
   end
+
 end
 
 
@@ -309,10 +309,63 @@ for q in 1:nsteps
   temper(atoms,T)
   get_energy(atoms)
   write_pos(atoms)
-  write_vel(atoms)
+  #write_vel(atoms)
   println("Steps completed:",q,"/",nsteps,", Energy: ",energy)
   #println("Steps completed:",q,"/",nsteps)
 end
+
+#****************************
+#Write the histogram
+#****************************
+function write_vel_hist(atoms)
+  natoms = n^3
+  outfile = "vel_hist.dat"
+  open(outfile, "a") do f
+    for i in 1:size(atoms, 1)
+      @printf(f,"%lf %lf %lf\n",atoms[i].vel[1],atoms[i].vel[2],atoms[i].vel[3])
+    end
+  end
+end
+
+function write_speed_hist(atoms)
+  natoms = n^3
+  outfile = "speed_hist.dat"
+  open(outfile, "a") do f
+    for i in 1:size(atoms, 1)
+      @printf(f,"%lf\n%lf\n%lf\n",atoms[i].vel[1],atoms[i].vel[2],atoms[i].vel[3])
+    end
+  end
+end
+
+
+
+println("Writing vel hist")
+write_vel_hist(atoms)
+println("Writing speed hist")
+write_speed_hist(atoms)
+
+
+println("Collecting vel vectors")
+list_size = size(atoms,1)
+data = []
+
+for n in 1:list_size
+  for m in 1:3
+    datum = atoms[n].vel #should be the list of velocities from final frame?
+    push!(data,datum)
+  end
+end
+
+println("")
+println("Doing flattening")
+A = collect(Iterators.flatten(data)) #single vector of velocities from final step
+
+println("Writing histogram")
+histogram(A,bins=50)
+
+println("Saving .png")
+savefig("/home/mkmostro/classes/SM2/morse_verlet/plot.png")
+
 
 println("")
 println("Done!\n")
