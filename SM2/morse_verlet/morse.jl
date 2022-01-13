@@ -8,12 +8,12 @@ using Distributions
 using Plots
 
 println("________________________\n\n")
-println("Morse Potential MD v0.9\n")
+println("Morse Potential MD v1.0\n")
 
 global kb = 1.38064852e-23
-global nsteps = 700                #number of integration points
-global dt = 0.05                    #timestep size
-global n = 5                        #cube root of the number of atoms to be simulated
+global nsteps = 2                #number of integration points
+global dt = 0.1                    #timestep size
+global n = 4                        #cube root of the number of atoms to be simulated
 global dx = 3.0                      #spacing between adjacent atoms in cube
 global origin = [0.,0.,0.]
 println("Number of steps: ", nsteps)
@@ -77,7 +77,7 @@ end     #k
 
 
 #****************************
-#Make the velocities gaussian
+#Initialize random velocities
 #****************************
 function init_temper(atoms,target_temp)
   for i in 1:length(atoms)
@@ -99,6 +99,53 @@ function init_temper(atoms,target_temp)
 end
 
 #****************************
+#Make random distribution of velocities gaussian
+#****************************
+function gaussify(atoms)
+  
+  #https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform#Basic_form
+  for i in 1:size(atoms,1)
+    U1 = rand()
+    U2 = rand()
+    R = sqrt(-2 * log(U1))
+    theta = 2*pi*U2
+    X1 = R * cos(theta) #both X1 and X2 are similarly gaussian distributed 
+    X2 = R * sin(theta) #and either can be used to substitute atoms[i].vel[n]
+    atoms[i].vel[1] = X1
+
+    U1 = rand()
+    U2 = rand()
+    R = sqrt(-2 * log(U1))
+    theta = 2*pi*U2
+    Y1 = R * cos(theta)
+    Y2 = R * sin(theta)
+    atoms[i].vel[2] = Y1
+
+    U1 = rand()
+    U2 = rand()
+    R = sqrt(-2 * log(U1))
+    theta = 2*pi*U2
+    Z1 = R * cos(theta)
+    Z2 = R * sin(theta)
+    atoms[i].vel[3] = Z1
+  end
+end
+gaussify(atoms)
+
+#****************************
+#Turn velocity PDF into a speed PDF
+#****************************
+speeds = []
+function speed(atoms)
+  for i in 1:size(atoms,1)
+    for n in 1:3
+      speed = sqrt(atoms[i].vel[n] * atoms[i].vel[n])
+      push!(speeds,speed)
+    end
+  end
+end
+
+#****************************
 #Rescale velocities for thermostat
 #****************************
 function temper(atoms,target_temp)
@@ -116,7 +163,7 @@ end
 #****************************
 #Take out Center of Mass velocities
 #****************************
-function com(atoms)
+function anticom(atoms)
       sumvx = 0.
       sumvy = 0.
       sumvz = 0.
@@ -296,7 +343,7 @@ init_temper(atoms,T)
 println("Temperature: ",T)
 println("")
 
-com(atoms)
+anticom(atoms)
 forces(atoms,cutoff)        #give a value to old acceleration in integration loop
 rm("traj.xyz")
 
@@ -327,22 +374,13 @@ function write_vel_hist(atoms)
   end
 end
 
-function write_speed_hist(atoms)
-  natoms = n^3
-  outfile = "speed_hist.dat"
-  open(outfile, "a") do f
-    for i in 1:size(atoms, 1)
-      @printf(f,"%lf\n%lf\n%lf\n",atoms[i].vel[1],atoms[i].vel[2],atoms[i].vel[3])
-    end
-  end
-end
 
 
 
 println("Writing vel hist")
 write_vel_hist(atoms)
 println("Writing speed hist")
-write_speed_hist(atoms)
+speed(atoms)
 
 
 println("Collecting vel vectors")
@@ -359,13 +397,16 @@ end
 println("")
 println("Doing flattening")
 A = collect(Iterators.flatten(data)) #single vector of velocities from final step
+B = collect(Iterators.flatten(speeds))
 
 println("Writing histogram")
 histogram(A,bins=50)
 
 println("Saving .png")
-savefig("/home/mkmostro/classes/SM2/morse_verlet/plot.png")
+savefig("/home/mkmostro/classes/SM2/morse_verlet/vel_plot.png")
 
+histogram(B,bins=50)
+savefig("/home/mkmostro/classes/SM2/morse_verlet/speed_plot.png")
 
 println("")
 println("Done!\n")

@@ -32,7 +32,10 @@ println("Timestep size: ",dt)
 println("")
 
 function get_acc(x,w,m)
-  dudx = m * (w^2) * (x-x0)   #U = (m/2) * (w^2) * (x-x0)^2
+  D = 0.7
+  a = 3.
+  #dudx = m * (w^2) * (x-x0)   #U = (m/2) * (w^2) * (x-x0)^2
+  dudx = 2 * D * (exp(-a * (x - x0)) - exp(-2 * a * (x - x0)))
   F = -dudx
   acc = F/m
 
