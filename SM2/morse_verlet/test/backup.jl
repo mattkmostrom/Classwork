@@ -1,5 +1,5 @@
 #To do:
-#1.) Make a box
+#1.) Fix LJ forces
 using SpecialFunctions
 using LinearAlgebra
 using Printf
@@ -13,45 +13,50 @@ println("________________________\n\n")
 println("Morse Potential MD v1.0\n")
 println("")
 
-global type = "harmonic"                    #Potential type, "LJ" or "morse" or "harmonic"
+global type = "LJ"              #Potential type, "LJ" or "morse" or "harmonic"
 global kb = 1.38064852e-23
-global n = 2                        #cube root of the number of atoms to be simulated
+global n = 2                          #cube root of the number of atoms to be simulated
 natoms = n^3
-global dx = 1.5                      #spacing between adjacent atoms in cube
+global dx = 2.0                       #spacing between adjacent atoms in cube
 
 #****************************
 #Make the units correct
 #****************************
+eps = 1.
+sig = 1.
+w = 1.
+
+#eps = 500 #128.326802            #well-depth; this is in units of eps/kb, so T will just be Tstar * eps
+#sig = 3.371914              #place where E = 0, NOT x corresponding to bottom of well
+#w = 3.                      #arbitrary potential-specific parameter; harmonic freq, morse alpha, etc #alpha is well width. bigger alpha means gentler sloped well. "bond stiffness"
+
 Tstar = 0.8511              #Temperature
 rhostar = 0.776             #density
 massstar = 32.              #twisting your mind and smashing your dreams
-eps = 128.326802            #well-depth; this is in units of eps/kb, so T will just be Tstar * eps
-sig = 3.371914              #place where E = 0, NOT x corresponding to bottom of well
-w = 3.                      #arbitrary potential-specific parameter; harmonic freq, morse alpha, etc #alpha is well width. bigger alpha means gentler sloped well. "bond stiffness"
 
 T = Tstar * eps
-mass = massstar * (10. / (6.022169 * 1.380662))
 rho = rhostar / (sig)^3
+mass = massstar * (10. / (6.022169 * 1.380662))
 
 time_star = mass * (sig * sig / eps)
 time = 100 * time_star
-global dt = 0.005 * time_star
-#global nsteps = round(time / dt)    #number of integration points
-nsteps = 2000
-println("Timestep size: ",dt)       #timestep size
+global dt = 0.005 * time_star               #timestep size
+#global nsteps = round(time / dt)           #number of integration points
+nsteps = 200
+
+cell = (n ^ 3 / rho) ^ (1. / 3.)            #Cell size reduced units
+global cutoff = cell/2                      #how far atoms can see each other
+
+println("Timestep size: ",dt)       
 println("Number of steps: ", nsteps)
-
-cell = (n ^ 3 / rho) ^ (1. / 3.)    #Cell size reduced units
-global cutoff = cell/2              #how far atoms can see each other
-
-@printf("Cutoff Distance: %lf\n",cutoff)
+println("Cutoff Distance: ",cutoff)
 @printf("Reduced Density: %f\nReduced Cell size: %f",rho,cell)
 
 
 mutable struct Element      #Make classes a thing in julia
     type::String
     mass::Real
-    eps::Real
+    eps::Real               #imposing types onto variables
     sig::Real
     w::Real
     x0::Vector{<:Real}
@@ -73,7 +78,7 @@ atoms = []
 for i in 1:n
   for j in 1:n
     for k in 1:n
-      x0 = [i,j,k] .* dx
+      x0 = ([i,j,k] .* dx) .- cutoff              #doesn't just fill up octant 1
       atom = Ar(x0,x0,zeros(3),zeros(3),zeros(3)) #Ar is a function of 5 vectors: x0,pos,vel,acc,acc_old
       push!(atoms,atom)
     end #i
@@ -149,7 +154,7 @@ function gaussify(atoms)
     atoms[i].vel[3] = Z1
   end
 end
-gaussify(atoms)
+
 
 #****************************
 #Turn velocity PDF into a speed PDF
@@ -240,16 +245,16 @@ function forces(atoms,cutoff)
         #println(d_pos)
         #println("Distance between ",i," and ",j,": ",dr)
 
-
         if(dr<cutoff)
 
-          #d_pos = d_pos/dr                #[dx/dr, dy/dr , dz/dr]
+          d_pos = d_pos ./ dr                #[dx/dr, dy/dr , dz/dr]
         
           if type == "LJ"
             #******************************
             #Lennard-Jones
             #******************************
-            dudr = 24. * atoms[i].eps / (dr ^ 2) * ( 2 * (atoms[i].sig / dr) ^ 12 - (atoms[i].sig / dr)^6 )
+            #dudr = 24. * atoms[i].eps / (dr ^ 2) * ( 2 * (atoms[i].sig / dr) ^ 12 - (atoms[i].sig / dr)^6 )
+            dudr = eps * (12*(sig/dr)^11 - 12*(sig/dr)^5)
 
           elseif type == "morse"
             #******************************
@@ -261,21 +266,17 @@ function forces(atoms,cutoff)
             
             
           elseif type == "harmonic"
-            #U = 0.5 * atoms[i].w * dr * dr
+            #U = 0.5 * atoms[i].w * dr^2
             dudr = atoms[i].w * dr        
           end
 
-          #force = (-dudr .* d_pos[1]) / dr
-          force[1] = (-dudr) * (d_pos[1]/dr)    #(dU/dr)*(dr/dx)
-          force[2] = (-dudr) * (d_pos[2]/dr)
-          force[3] = (-dudr) * (d_pos[3]/dr)
-          force = force .* (atoms[1].sig/atoms[1].eps)        #force in reduced units
+          force = (d_pos .* (-dudr)) / dr
+          #force[1] = (-dudr) * (d_pos[1]/dr)    #(dU/dr)*(dr/dx)
+          #force[2] = (-dudr) * (d_pos[2]/dr)
+          #force[3] = (-dudr) * (d_pos[3]/dr)
+          #force = force .* (atoms[i].sig/atoms[i].eps)        #force in reduced units
 
-          for n in 1:3
-            atoms[i].acc[n] = (dr * force[n]) / atoms[i].mass
-          end
-
-          #atoms[i].acc = (dr .* force) / atoms[i].mass
+          atoms[i].acc = (dr .* force) / atoms[i].mass         #[Fx*dr, Fy*dr, Fz*dr] / mass
 
       else(dr > cutoff)
           force = [0.,0.,0.]
@@ -284,10 +285,6 @@ function forces(atoms,cutoff)
     end         #j
   end           #i
 end             #forces()
-
-#forces(atoms,cutoff)         #tried to profile my forces function, not sure what the deal is
-#@profile forces(atoms,cutoff)
-#Profile.print()
 
 function get_energy(atoms)
   global energy = 0.0
@@ -342,17 +339,14 @@ function get_energy(atoms)
     KE += atoms[i].mass * total_vel
     energy = KE + PE
   end
-  #return energy
-  #return PE
-  #return KE
 end
 
 #****************************
 #Integrate the positions and update the velocities
 #****************************
 function integrate(atoms,dt)
-  for j in 1:length(atoms)
-  #for j in 1:size(atoms,1)
+  #for j in 1:length(atoms)
+  for j in 1:size(atoms,1)
     atoms[j].pos = atoms[j].pos .+ atoms[j].vel * dt .+ (0.5 .* atoms[j].acc * (dt^2.))   #Integrate
     atoms[j].acc_old = atoms[j].acc
 
@@ -397,7 +391,8 @@ println("***************")
 println("Running dynamics...")
 
 
-init_temper(atoms,T)
+#init_temper(atoms,T)
+#gaussify(atoms)
 println("\nTemperature: ",T)
 println("")
 
@@ -417,7 +412,6 @@ touch("energy.dat")
 touch("avg_energy.dat")
 touch("potential_energy.dat")
 touch("kinetic_energy.dat")
-
 rm("traj.xyz")
 rm("vel.dat")
 rm("energy.dat")
@@ -466,7 +460,6 @@ function run_dynamics(atoms,dt,T,n,nsteps,natoms)
     end
 
     push!(energies,energy)
-    
     e_sum += energy
     average_energy = e_sum / q  
 
@@ -533,11 +526,11 @@ println("Writing histogram")
 histogram(A,bins=50)
 
 println("Saving velocity plot")
-savefig("vel_plot.png")
+#savefig("vel_plot.png")
 
 println("Saving speed plot")
 histogram(B,bins=100)
-savefig("speed_plot.png")
+#savefig("speed_plot.png")
 
 println("")
 println("Done!\n")
