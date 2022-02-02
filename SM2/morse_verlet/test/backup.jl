@@ -1,5 +1,3 @@
-#To do:
-#1.) Make a box
 using SpecialFunctions
 using LinearAlgebra
 using Printf
@@ -276,6 +274,8 @@ function forces(atoms,cutoff)
 
         dr = sqrt(dot(d_pos,d_pos))     #sqrt(dx^2 + dy^2 + dz^2), Float64
 
+        #println("dr: ",dr)
+
         if(dr<cutoff)
 
           #d_pos = d_pos/dr                #[dx/dr, dy/dr , dz/dr]
@@ -321,21 +321,21 @@ function forces(atoms,cutoff)
     end         #j
   end           #i
   
-#=
+
   println("START FORCES LOOP DUMP ")
   d_pos = atoms[1].pos .- atoms[2].pos
   dr = sqrt(dot(d_pos,d_pos))
   println("")
   println("Position of Atom ",1," x:",atoms[1].pos[1],", y: ",atoms[1].pos[2],", z: ",atoms[1].pos[3])
   println("Position of Atom ",2," x:",atoms[2].pos[1],", y: ",atoms[2].pos[2],", z: ",atoms[2].pos[3])
-  println(d_pos)
+  println("d_pos: ",d_pos)
   println("Distance between ",1," and ",2,": ",dr)
   println("dr^7: ",dr^7)
   println("dr^13: ",dr^13)
   
   println("")
   println("Force on Atom ",1," x:",force[1],", y: ",force[2],", z: ",force[3])
-  
+#=  
   println("")
   println("Acceleration on Atom ",1," x:",atoms[1].acc[1],", y: ",atoms[1].acc[2],", z: ",atoms[1].acc[3])
   println("Acceleration on Atom ",2," x:",atoms[2].acc[1],", y: ",atoms[2].acc[2],", z: ",atoms[2].acc[3])
@@ -343,7 +343,7 @@ function forces(atoms,cutoff)
   println("")
   println("END FORCES LOOP DUMP ")
   return force
-=#
+ =#
 end             #forces()
 
 
@@ -351,24 +351,22 @@ function get_energy(atoms)
   global energy = 0.0
   global KE = 0.0
   global PE = 0.0
+  local total_vel = 0.0
   summ = 0.0
+
   for i in 1:size(atoms,1)
     for j in 1:size(atoms,1)
       if atoms[i] != atoms[j]
-
         #***********************************************
         #Potential Energy
         #***********************************************
         dx = atoms[i].pos - atoms[j].pos
         dr = sqrt(dot(dx,dx))
-        #dx = dx / dr
-        
 
         if type == "LJ"
-
           #Lennard-Jones
           sig_r = atoms[i].sig / dr
-          U = 4 * atoms[i].eps * (((sig_r)^12)-((sig_r)^6))
+          U = 4 * atoms[i].eps * ( (sig_r^12) - (sig_r^6) )
 
         elseif type == "morse"
           #Morse
@@ -389,14 +387,19 @@ function get_energy(atoms)
 
         PE = U #+ lrc
         #summ += PE
+        total_vel += sqrt(dot(atoms[i].vel,atoms[i].vel))
+        println("total velocity: ",total_vel)
       end
     end
     #***********************************************
     #Kinetic Energy
     #***********************************************
-    total_vel = sqrt(dot(atoms[i].vel,atoms[i].vel))
-    KE += 0.5 * atoms[i].mass * total_vel ^ 2
     
+    
+    KE = 0.5 * atoms[i].mass * total_vel ^ 2
+    println("PE: ",PE)
+    println("KE: ",KE)
+    println("")
     energy = KE + PE
   end
 end
@@ -552,7 +555,7 @@ function run_dynamics(atoms,dt,T,n,nsteps,natoms)
     
     
 
-    println("Steps completed:",q,"/",nsteps,", Energy: ",energy,"*******************************************")   
+    println("Steps completed:",q,"/",nsteps,", Energy: ",energy)   
   end
 
 end
