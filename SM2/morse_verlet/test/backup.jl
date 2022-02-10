@@ -13,41 +13,34 @@ println("Morse Potential MD v1.0\n")
 println("")
 
 global type = "LJ"            #Potential type, "LJ" or "morse" or "harmonic"
-global kb = 1.38064852e-23
-global n = 2                        #cube root of the number of atoms to be simulated
-#global dx = 1.           #spacing between adjacent atoms in cube
-global dx = 1.12246204831           #spacing between adjacent atoms in cube
+global n = 4                        #cube root of the number of atoms to be simulated
+global dx = 3.405           #spacing between adjacent atoms in cube
+#global dx = 1.12246204831           #spacing between adjacent atoms in cube
+
 
 #****************************
 #Make the units correct
 #****************************
 Tstar = 0.8511              #Temperature
 rhostar = 0.776             #density
-massstar = 32.              #twisting your mind and smashing your dreams
-eps = 1.            #well-depth; this is in units of eps/kb, so T will just be Tstar * eps
-sig = 1.              #place where E = 0, NOT x corresponding to bottom of well
+massstar = 39.9             #twisting your mind and smashing your dreams
+
+eps = 119.8                 #well-depth; this is in units of eps/kb, so T will just be Tstar * eps
+sig = 3.405                 #place where E = 0, NOT x corresponding to bottom of well
 w = 1.                      #arbitrary potential-specific parameter; harmonic freq, morse alpha, etc #alpha is well width. bigger alpha means gentler sloped well. "bond stiffness"
 
 T = Tstar * eps
-#mass = massstar * (10. / (6.022169 * 1.380662))
-mass = 1.
-rho = rhostar / (sig)^3
+mass = massstar * (10. / (6.022169 / 1.380662)) #KPsa
+rho = rhostar / (sig^3)
 
 time_star = mass * (sig * sig / eps)
 time = 100 * time_star
-#global dt = 0.005 * time_star
-global dt = 0.01
+global dt = 0.005 * time_star
 #global nsteps = round(time / dt)    #number of integration points
-nsteps = 3
+nsteps = 2
 println("Timestep size: ",dt)       #timestep size
 println("Number of steps: ", nsteps)
 
-#cell = (n ^ 3 / rho) ^ (1. / 3.)    #Cell size reduced units
-cell = 100000.
-global cutoff = cell/2              #how far atoms can see each other
-
-@printf("Cutoff Distance: %lf\n",cutoff)
-@printf("Reduced Density: %f\nReduced Cell size: %f",rho,cell)
 
 
 mutable struct Element      #Make classes a thing in julia
@@ -71,28 +64,33 @@ Ar(x0::Vector,pos::Vector,vel::Vector,acc::Vector,acc_old::Vector) = Element("Ar
 #****************************
 #Make the cubic lattice
 #****************************
+
 atoms = []
 for i in 1:n
-  #for j in 1:n
-   # for k in 1:n
-      #x0 = [i,j,k] .* dx
-      x0 = [i,0,0] .* dx
+  for j in 1:n
+    for k in 1:2
+      x0 = ([i,j,k] .* dx) #.- cell/2
+      #x0 = [i,0,0] .* dx
       atom = Ar(x0,x0,zeros(3),zeros(3),zeros(3)) #Ar is a function of 5 vectors: x0,pos,vel,acc,acc_old
       push!(atoms,atom)
-    #end #i
-  #end   #j
+    end #i
+  end   #j
 end     #k
 
-natoms = size(atoms,1)
 
-atoms[1].vel = [1.,0.,0.]
-atoms[2].vel = [-1.,0.,0.]
-#atoms[1].pos = [-1.,0.,0.]
-#atoms[2].pos = [0.,0.,0.]
+global natoms = size(atoms,1)
+global cell = (natoms / rho) ^ (1. / 3.)    #Cell size reduced units
+#global cell = 100.
+global cutoff = cell/3              #how far atoms can see each other
 
+
+println("Number of atoms: ",natoms)
+@printf("Cutoff Distance: %lf\n",cutoff)
+@printf("Reduced Density: %f\nReduced Cell size: %f",rho,cell)
+println("\nReduced mass: ",mass)
 
 function write_init_pos(atoms)
-  natoms = n
+  natoms = size(atoms,1)
   outfile = "init_pos.xyz"
   open(outfile, "a") do f
     @printf(f,"%i\n\n",natoms)
@@ -107,7 +105,7 @@ rm("init_pos.xyz")
 write_init_pos(atoms)
 
 function write_init_vel(atoms)
-  natoms = n
+  natoms = size(atoms,1)
   outfile = "init_vel.xyz"
   open(outfile, "a") do f
     @printf(f,"%i\n\n",natoms)
@@ -117,30 +115,15 @@ function write_init_vel(atoms)
   end
 end
 
-function write_init_mass(atoms)
-  natoms = n
-  outfile = "init_mass.xyz"
-  open(outfile, "a") do f
-    @printf(f,"%i\n\n",natoms)
-    for i in 1:size(atoms, 1)
-      @printf(f,"%s %lf\n","Ar",atoms[i].mass)
-    end
-  end
-end
-
-
 touch("init_vel.xyz")
 rm("init_vel.xyz")
 write_init_vel(atoms)
-touch("init_mass.xyz")
-rm("init_mass.xyz")
-write_init_mass(atoms)
 
 #****************************
 #Initialize random velocities
 #****************************
 function init_temper(atoms,target_temp)
-  for i in 1:length(atoms)
+  for i in 1:size(atoms,1)
       atoms[i].vel .+= rand(3)
   end
 
@@ -252,6 +235,7 @@ end
 #Calculate forces (update potentials)
 #****************************
 function forces(atoms,cutoff)
+
   force = [0.,0.,0.]               #initialize forces, might as well make them zero floats
   for i in 1:size(atoms,1)         #zero out accelerations
     atoms[i].acc = zeros(3)
@@ -259,10 +243,14 @@ function forces(atoms,cutoff)
 
   for i in 1:size(atoms,1)-1
     for j in i+1:size(atoms,1)
-      #if atoms[i] != atoms[j]   #should this be i < j?
-
+      
         d_pos = atoms[i].pos .- atoms[j].pos    #[dx,dy,dz], Float64
 
+        d_pos[1] = d_pos[1] - cell * round(d_pos[1] / cell)
+        d_pos[2] = d_pos[2] - cell * round(d_pos[2] / cell)
+        d_pos[3] = d_pos[3] - cell * round(d_pos[3] / cell)
+
+        
         for d in 1:3              #Periodic Boundaries
           if(atoms[i].pos[d] > (cell/2))
             atoms[i].pos[d] -= cell
@@ -272,11 +260,10 @@ function forces(atoms,cutoff)
           end
         end
 
+
         dr = sqrt(dot(d_pos,d_pos))     #sqrt(dx^2 + dy^2 + dz^2), Float64
 
-        #println("dr: ",dr)
-        #println("Forces i: ",i," and j: ",j)
-
+        
         if(dr<cutoff)
 
           #d_pos = d_pos/dr                #[dx/dr, dy/dr , dz/dr]
@@ -297,20 +284,23 @@ function forces(atoms,cutoff)
             dudr = (2.0 * D * atoms[i].w) .* expar .* (1.0 - expar)   #U = D * (1.0 - expar) ^ 2
 
           elseif type == "harmonic"
-            #U = 0.5 * atoms[i].w * dr * dr
-            dudr = atoms[i].w * dr
+            dudr = atoms[i].w * dr #U = 0.5 * atoms[i].w * dr * dr
           end
 
-          #println("dudr: ",dudr)
+#          println("dudr: ",dudr)
+          
 
           #force = (-dudr .* d_pos[1]) / dr
           force[1] = (-dudr) * (d_pos[1]/dr)    #(dU/dr)*(dr/dx)
           force[2] = (-dudr) * (d_pos[2]/dr)
           force[3] = (-dudr) * (d_pos[3]/dr)
           #force = force .* (atoms[1].sig/atoms[1].eps)        #force in reduced units
+          
+#          println("F",i,j,": ",force[1])
 
           for n in 1:3
-            atoms[i].acc[n] = (dr * force[n]) / atoms[i].mass
+            atoms[i].acc[n] += (force[n]) / atoms[i].mass
+            atoms[j].acc[n] -= (force[n]) / atoms[j].mass
           end
 
           #atoms[i].acc = (dr .* force) / atoms[i].mass
@@ -321,6 +311,28 @@ function forces(atoms,cutoff)
       #end       #if i!=j
     end         #j
   end           #i
+
+ #= d_pos = atoms[1].pos .- atoms[2].pos
+  dr = sqrt(dot(d_pos,d_pos))
+  println("")
+  println("Position of Atom ",1," x:",atoms[1].pos[1],", y: ",atoms[1].pos[2],", z: ",atoms[1].pos[3])
+  println("Position of Atom ",2," x:",atoms[2].pos[1],", y: ",atoms[2].pos[2],", z: ",atoms[2].pos[3])
+  println("d_pos: ",d_pos)
+  println("dr between ",1," and ",2,": ",dr)
+
+  println("")
+  println("Force on Atom ",1," x:",force[1],", y: ",force[2],", z: ",force[3])
+
+
+  println("")
+  println("Acceleration on Atom ",1," x:",atoms[1].acc[1],", y: ",atoms[1].acc[2],", z: ",atoms[1].acc[3])
+  println("Acceleration on Atom ",2," x:",atoms[2].acc[1],", y: ",atoms[2].acc[2],", z: ",atoms[2].acc[3])
+  println("")
+  println("")
+  println("END FORCES LOOP DUMP \n")
+=#
+
+
 end             #forces()
 
 
@@ -332,54 +344,46 @@ function get_energy(atoms)
   summ = 0.0
 
   for i in 1:size(atoms,1)
-    total_vel = dot(atoms[i].vel,atoms[i].vel)
-    KE += 0.5 * atoms[i].mass * total_vel
-    #println("Atom ",i," velocity: ",atoms[i].vel)
-    #println("   KE: ",KE," i: ",i,)
+    total_vel += dot(atoms[i].vel,atoms[i].vel)
   end
-
   
+  KE = 0.5 * atoms[1].mass * total_vel
 
   for i in 1:size(atoms,1)-1
     for j in i+1:size(atoms,1)
-      #if atoms[i] != atoms[j]
-      
+      dx = atoms[i].pos - atoms[j].pos
+      dr = sqrt(dot(dx,dx))
 
-        dx = atoms[i].pos - atoms[j].pos
-        dr = sqrt(dot(dx,dx))
+      if dr <= cutoff
 
-        if dr <= cutoff
+        if type == "LJ"
+          #Lennard-Jones
+          sig_r = atoms[i].sig / dr
+          U = 4. * atoms[i].eps * ( (sig_r^12) - (sig_r^6) )
 
-          if type == "LJ"
-            #Lennard-Jones
-            sig_r = atoms[i].sig / dr
-            U = 4. * atoms[i].eps * ( (sig_r^12) - (sig_r^6) )
+        elseif type == "morse"
+          #Morse
+          D = atoms[i].eps
+          dr = dr - atoms[i].sig
+          #alpha = 2                  #well width. bigger alpha means gentler sloped well. "bond stiffness"
+          expar = exp(- atoms[i].w * dr)
+          U = D * (1.0 - expar) * (1.0 - expar)
 
-          elseif type == "morse"
-            #Morse
-            D = atoms[i].eps
-            dr = dr - atoms[i].sig
-            #alpha = 2                  #well width. bigger alpha means gentler sloped well. "bond stiffness"
-            expar = exp(- atoms[i].w * dr)
-            U = D * (1.0 - expar) * (1.0 - expar)
+        elseif type == "harmonic"
+          #Harmonic
+          U = 0.5 * atoms[i].w * dr * dr
 
-          elseif type == "harmonic"
-            #Harmonic
-            U = 0.5 * atoms[i].w * dr * dr
+        end #type if
+        #prefactor = pi * size(atoms,1) * rhostar * cutoff^(-3)
+        #lrc = ((8/9) - (8/3)) * prefactor
+        #println("     PE add: ",PE-U," ij: ",i,j)
+        PE += U #+ lrc
 
-          end #type if
-          #prefactor = pi * size(atoms,1) * rhostar * cutoff^(-3)
-          #lrc = ((8/9) - (8/3)) * prefactor
-          #println("     PE add: ",PE-U," ij: ",i,j)
-          PE += U #+ lrc
-
-        elseif dr > cutoff
-          U = 0.
-        end #if cutoff
-      #end  #if i != j
+      elseif dr > cutoff
+        U = 0.
+      end #if cutoff
     end #j
   end #i
-  #println("KE: ",KE,"   PE: ",PE)
   energy = KE + PE
 end   #energy()
 
@@ -388,34 +392,40 @@ end   #energy()
 #****************************
 function integrate(atoms,dt)
   for j in 1:size(atoms,1)
-  #for j in 1:size(atoms,1)
     atoms[j].pos = atoms[j].pos .+ atoms[j].vel * dt .+ (0.5 .* atoms[j].acc * (dt^2.))   #Integrate
     atoms[j].acc_old = atoms[j].acc
+  end
 
-    forces(atoms,cutoff)         #Calculate forces
+  forces(atoms,cutoff)         #Calculate forces
 
+  for j in 1:size(atoms,1)
     atoms[j].vel = atoms[j].vel .+ (0.5 .* (atoms[j].acc + atoms[j].acc_old) * dt)  #Update velocities
+  end
 
+  #=println("")
+  println("Velocity of atom 1: ",atoms[1].vel)
+  println("Velocity of atom 2: ",atoms[2].vel)
+  println("")
+=#
 
-    write_pos(atoms)
-    write_vel(atoms)
-    get_energy(atoms)
+  write_pos(atoms)
+  write_vel(atoms)
+  get_energy(atoms)
 
-    local natoms = size(atoms,1)
-    outfile = "energy.dat"
-    open(outfile, "a") do f
-      @printf(f,"%lf\n",energy)
-    end
+  local natoms = size(atoms,1)
+  outfile = "energy.dat"
+  open(outfile, "a") do f
+    @printf(f,"%lf\n",energy)
+  end
 
-    outfile = "potential_energy.dat"
-    open(outfile, "a") do f
-      @printf(f,"%lf\n",PE)
-    end
+  outfile = "potential_energy.dat"
+  open(outfile, "a") do f
+    @printf(f,"%lf\n",PE)
+  end
 
-    outfile = "kinetic_energy.dat"
-    open(outfile, "a") do f
-      @printf(f,"%lf\n",KE)
-    end
+  outfile = "kinetic_energy.dat"
+  open(outfile, "a") do f
+    @printf(f,"%lf\n",KE)
   end
 end
 
@@ -453,7 +463,8 @@ println("")
 println("***************")
 println("Running dynamics...")
 
-#init_temper(atoms,T)
+init_temper(atoms,T)
+gaussify(atoms)
 println("\nTemperature: ",T)
 println("")
 
@@ -463,10 +474,12 @@ forces(atoms,cutoff)        #give a value to old acceleration in integration loo
 get_energy(atoms)
 println("Total inital energy is: ",energy)
 
+#=
 println("\nInital Accelerations: ")
 for i in 1:size(atoms,1)
   println("Atom ",i,": ",atoms[i].acc)
 end
+=#
 
 println("")
 
@@ -502,9 +515,10 @@ function run_dynamics(atoms,dt,T,n,nsteps,natoms)
     #  println("Atom ",i,": ",atoms[i].acc)
     #end
 
-    #if q !=0 && q%10==0 && q < (nsteps/2)
-    #  temper(atoms,T)
-    #end
+    if q !=0 && q%10==0 && q < (nsteps/2)
+#      temper(atoms,T)
+      #anticom(atoms)
+    end
 
     #get_energy(atoms)
 
@@ -514,10 +528,12 @@ function run_dynamics(atoms,dt,T,n,nsteps,natoms)
 end
 run_dynamics(atoms,dt,T,n,nsteps,natoms)
 
+#=
 println("\nFinal Accelerations: ")
 for i in 1:natoms
   println("Atom ",i,": ",atoms[i].acc)
 end
+=#
 
 #****************************
 #Write the histogram
@@ -568,5 +584,9 @@ println("Saving speed plot")
 println("")
 println("Done!\n")
 println("")
+
+@printf("Cutoff Distance: %lf\n",cutoff)
+@printf("Reduced Density: %f\nReduced Cell size: %f",rho,cell)
+println("\nReduced mass: ",mass)
 println("Position trajectory is in 'traj.xyz', velocity trajectory is in 'vel.dat'.")
 println("")
