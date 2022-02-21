@@ -11,7 +11,7 @@ println("Morse Potential MD v1.0\n")
 println("")
 
 global type = "LJ"           #Potential type: "LJ" or "morse" or "harmonic"
-global n = 8                 #cube root of the number of atoms to be simulated
+global n = 4                 #cube root of the number of atoms to be simulated
 
 #****************************
 #Set some constants and make the units correct
@@ -28,10 +28,10 @@ T = Tstar * eps
 mass = massstar * (10. / (6.022169 / 1.380662)) #KPsa
 rho = rhostar / (sig^3)
 
-time_star = mass * (sig * sig / eps)
-time = 100 * time_star
+time_star = mass * (sig * sig / eps)      #this block is just making the 
+time = 100 * time_star                    #units what they should be in the paper
 global dt = 0.005 * time_star
-global nsteps = round(time / dt)    #number of integration points
+global nsteps = 0.5 * round(time / dt)    #number of integration points
 global natoms = n^3
 global cell = (natoms / rho) ^ (1. / 3.)    #Cell size reduced units
 global dx = cell/n           #spacing between adjacent atoms in cube
@@ -40,8 +40,6 @@ global dx = cell/n           #spacing between adjacent atoms in cube
 #nsteps = 100000
 println("Timestep size: ",dt)       #timestep size
 println("Number of steps: ", nsteps)
-
-global q = 0
 
 
 mutable struct Element      #Make classes a thing in julia
@@ -69,8 +67,7 @@ atoms = []
 for i in 1:n
   for j in 1:n
     for k in 1:n
-      x0 = ([i,j,k] .* dx) #.- cell/2
-  #    x0 = [i,0,0] .* dx
+      x0 = ([i,j,k] .* dx)  #define some coordinate for the atom in question to sit at
       atom = Ar(x0,x0,zeros(3),zeros(3),zeros(3)) #Ar is a function of 5 vectors: x0,pos,vel,acc,acc_old
       push!(atoms,atom)
     end #i
@@ -108,12 +105,12 @@ write_init_pos(atoms)
 function init_temper(atoms,target_temp)
   Random.seed!(1234)
   for i in 1:size(atoms,1)
-      atoms[i].vel .+= rand(3)
+      atoms[i].vel .+= rand(3)  #slap some random numbers in there
   end
 
   itemp = 0
   for i in 1:size(atoms,1)
-    atoms[i].vel[1] -= 0.5
+    atoms[i].vel[1] -= 0.5    #change from 0-1 to -0.5-0.5
     atoms[i].vel[2] -= 0.5
     atoms[i].vel[3] -= 0.5
     itemp += atoms[i].mass * dot(atoms[i].vel,atoms[i].vel)
@@ -166,7 +163,7 @@ speeds = []
 function speed(atoms)
   for i in 1:size(atoms,1)
     for n in 1:3
-      speed = sqrt(atoms[i].vel[n] * atoms[i].vel[n])
+      speed = abs(atoms[i].vel[n]) 
       push!(speeds,speed)
     end
   end
@@ -176,41 +173,45 @@ end
 #Rescale velocities for thermostat
 #****************************
 function temper(atoms,target_temp)
-    itemp = 0
-  for i in 1:size(atoms,1)
+  itemp = 0.0
+  
+  for i in 1:size(atoms,1)  #get total kinetic energy
     itemp += atoms[i].mass * dot(atoms[i].vel,atoms[i].vel)
   end
-
+                                      #divide by DOF
   itemp /= 3 * size(atoms,1) - 3      #Need to comment out the '-3' if there's only 1 atom
-  for i in 1:size(atoms,1)
+  
+  for i in 1:size(atoms,1)            #rescale temps
     atoms[i].vel *= sqrt(target_temp/itemp)
   end
+
 end
 
 #****************************
 #Take out Center of Mass velocities
 #****************************
+
 function anticom(atoms)
       sumvx = 0.
       sumvy = 0.
       sumvz = 0.
 
       for i in 1:size(atoms,1)
-        sumvx = atoms[i].vel[1] + sumvx
-        sumvy = atoms[i].vel[2] + sumvy
-        sumvz = atoms[i].vel[3] + sumvz
+        sumvx += atoms[i].vel[1]
+        sumvy += atoms[i].vel[2]
+        sumvz += atoms[i].vel[3]
       end
 
       #calculate the center of mass velocity
-      sumvx = sumvx / size(atoms,1)
-      sumvy = sumvy / size(atoms,1)
-      sumvz = sumvz / size(atoms,1)
+      sumvx /= size(atoms,1)
+      sumvy /= size(atoms,1)
+      sumvz /= size(atoms,1)
 
        #subtract off the center of mass velocity
       for i in 1:size(atoms,1)
-         atoms[i].vel[1] = atoms[i].vel[1] - sumvx
-         atoms[i].vel[2] = atoms[i].vel[2] - sumvy
-         atoms[i].vel[3] = atoms[i].vel[3] - sumvz
+         atoms[i].vel[1] -= sumvx
+         atoms[i].vel[2] -= sumvy
+         atoms[i].vel[3] -= sumvz
       end
 end
 
@@ -218,19 +219,19 @@ end
 #****************************
 #Calculate forces
 #****************************
-function forces(atoms,cutoff,q)
+function forces(atoms,cutoff)
 
   force = [0.,0.,0.]               #initialize forces, might as well make them zero floats
   for i in 1:size(atoms,1)         #zero out accelerations
     atoms[i].acc = zeros(3)
   end
 
-  for i in 1:size(atoms,1)-1
+  for i in 1:size(atoms,1)-1  #no double-counting, no self-counting
     for j in i+1:size(atoms,1)
       
         d_pos = atoms[i].pos .- atoms[j].pos    #[dx,dy,dz], Float64
 
-        for n in 1:3
+        for n in 1:3          #Calculate forces of nearest image
           if d_pos[n] > cutoff
             d_pos[n] -= cell
           elseif d_pos[n] <= -cutoff
@@ -262,21 +263,18 @@ function forces(atoms,cutoff,q)
           dudr = atoms[i].w * dr #U = 0.5 * atoms[i].w * dr * dr
         end
 
-        #force = (-dudr .* d_pos[1]) / dr
+       
         force[1] = (-dudr) * (d_pos[1]/dr)    #(dU/dr)*(dr/dx)
         force[2] = (-dudr) * (d_pos[2]/dr)
         force[3] = (-dudr) * (d_pos[3]/dr)
-        #force = force .* (atoms[1].sig/atoms[1].eps)        #force in reduced units
-
+       
         for n in 1:3
           atoms[i].acc[n] += force[n] / atoms[i].mass
           atoms[j].acc[n] -= force[n] / atoms[j].mass
         end
 
-        #atoms[i].acc = (dr .* force) / atoms[i].mass
-
       else(dr2 >= cutoff2)
-          force = [0.,0.,0.]
+        force = [0.,0.,0.]
       end
     end         #j
   end           #i
@@ -291,7 +289,7 @@ function get_energy(atoms)
   summ = 0.0
 
   for i in 1:size(atoms,1)
-    total_vel += dot(atoms[i].vel,atoms[i].vel)
+    total_vel += dot(atoms[i].vel,atoms[i].vel) #(Vx^2 + Vy^2 + Vz^2) = V^2
   end
   
   KE = 0.5 * atoms[1].mass * total_vel
@@ -299,24 +297,23 @@ function get_energy(atoms)
   for i in 1:size(atoms,1)-1
     for j in i+1:size(atoms,1)
       dx = atoms[i].pos - atoms[j].pos
-      for n in 1:3
-        if dx[n] > cutoff
+      
+      for n in 1:3        #making sure energy is calculated from 
+        if dx[n] > cutoff #nearest particle image
           dx[n] -= cell
         elseif dx[n] <= -cutoff
           dx[n] += cell
         end
-      end    
+      end
+      
       dr2 = dot(dx,dx)
-
-
-      #need 'ecut': value of potential energy at cutoff
 
       if dr2 <= cutoff2
         dr = sqrt(dr2)
         if type == "LJ"
           #Lennard-Jones
           sig_r = atoms[i].sig / dr
-          U = 4. * atoms[i].eps * ( (sig_r^12) - (sig_r^6) )
+          U = 4. * atoms[i].eps * ( (sig_r^12) - (sig_r^6) )    #Got ecut from UMS, idk
           ecut = 4 * atoms[i].eps * (((atoms[i].sig/cutoff)^12)-((atoms[i].sig/cutoff)^6))
 
         elseif type == "morse"
@@ -335,10 +332,11 @@ function get_energy(atoms)
           ecut = 0.5 * atoms[i].w * cutoff * cutoff
 
         end #type if
-        #prefactor = pi * size(atoms,1) * rhostar * cutoff^(-3)
-        #lrc = ((8/9) - (8/3)) * prefactor
-        #println("     PE add: ",PE-U," ij: ",i,j)
-        PE += U - ecut #+ lrc
+        
+        prefactor = pi * size(atoms,1) * rhostar * cutoff^(-3)
+        lrc = ((8/9) - (8/3)) * prefactor #from some paper brian linked
+        
+        PE += U - ecut + lrc              
 
       elseif dr2 > cutoff2
         U = 0.
@@ -352,12 +350,12 @@ end   #energy()
 #Integrate the positions and update the velocities
 #****************************
 function integrate(atoms,dt,q)
-  for j in 1:size(atoms,1)
-    atoms[j].pos = atoms[j].pos .+ atoms[j].vel * dt .+ (0.5 .* atoms[j].acc * (dt^2.))   #Integrate
+  for j in 1:size(atoms,1)          #https://en.wikipedia.org/wiki/Verlet_integration#Velocity_Verlet
+    atoms[j].pos = atoms[j].pos .+ atoms[j].vel * dt .+ (0.5 .* atoms[j].acc * (dt^2.))   #update positions
     atoms[j].acc_old = atoms[j].acc
   end
 
-  forces(atoms,cutoff,q)         #Calculate forces
+  forces(atoms,cutoff)         #Calculate forces
 
   for j in 1:size(atoms,1)
     atoms[j].vel = atoms[j].vel .+ (0.5 .* (atoms[j].acc + atoms[j].acc_old) * dt)  #Update velocities
@@ -367,7 +365,7 @@ function integrate(atoms,dt,q)
     for d in 1:3                           
       if(atoms[i].pos[d] > (cell/2))
         atoms[i].pos[d] -= cell
-      elseif(atoms[i].pos[d] <= (-cell/2)) #should be negative?
+      elseif(atoms[i].pos[d] <= (-cell/2))
         atoms[i].pos[d] += cell
       end
     end
@@ -428,51 +426,72 @@ println("")
 println("***************")
 println("Running dynamics...")
 
-init_temper(atoms,T)
-gaussify(atoms)
+init_temper(atoms,T)            #Give the atoms some random initial velocities
+gaussify(atoms)                 #make those random velocities a gaussian PDF
 println("\nTemperature: ",T)
 println("")
 
 anticom(atoms)
-forces(atoms,cutoff,0)        #give a value to old acceleration in integration loop
-
-get_energy(atoms)
-println("Total inital energy is: ",energy)
+forces(atoms,cutoff)        #give a value to old acceleration in integration loop
 
 
-println("")
-touch("traj.xyz")
+println("")         
+touch("traj.xyz")     #so you can start with empty files every time you run md.jl
 touch("vel.dat")
 touch("energy.dat")
 touch("avg_energy.dat")
 touch("potential_energy.dat")
 touch("kinetic_energy.dat")
+touch("itemp.dat")
 rm("traj.xyz")
 rm("vel.dat")
 rm("energy.dat")
 rm("avg_energy.dat")
 rm("potential_energy.dat")
 rm("kinetic_energy.dat")
+rm("itemp.dat")
 
 #****************************
 #Run the dynamics
 #****************************
 energies = []
 function run_dynamics(atoms,dt,T,n,nsteps,natoms)
+  itemp = 0.0
   e_sum = 0.0
-  println("#****************************")
-  println("STARTING PRODUCTION RUN")
-  println("#****************************")
+  av_E = 0.0
+  
   for q in 1:nsteps
     integrate(atoms,dt,q)
 
-    if q !=0 && q%10==0 && q < (nsteps/2)
+    if q !=0 && q%10==0 && q < (nsteps/4) #thermostat the first few steps
       temper(atoms,T)
     end
 
-    println("Steps completed:",q,"/",nsteps,", Energy: ",energy)
-  end
+    if q !=0 && q >= (nsteps/4)
+      av_E += energy      #getting the units right. There's
+    end                                   #a 1/k_b in there too, but it = 1
 
+    if q == nsteps                        #collecting energy averaging after
+      av_E /= (atoms[1].eps) * (nsteps-(nsteps/4))         #thermostat turns off
+    end
+
+    for i in 1:size(atoms,1)                                    #this is the same as what's in temper()
+      itemp += atoms[i].mass * dot(atoms[i].vel,atoms[i].vel)   #it's just here because julia is difficult 
+    end                                                         #when it comes to variable scoping
+    itemp /= 3 * size(atoms,1) - 3  #Need to comment out the '-3' if there's only 1 atom
+
+    natoms = size(atoms,1)
+    outfile = "itemp.dat"
+    open(outfile, "a") do f
+      for i in 1:size(atoms, 1)           #records the temperature at each step,
+        @printf(f,"%f\n",itemp)           #but step number isn't explicitly written
+      end                                 #so you might need to write it out yourself
+    end
+
+    println("Steps completed:",q,"/",nsteps,", Energy: ",energy,", Temperature: ",itemp)
+  end
+  println("\nAverage Energy: ",av_E)
+  println("Average Energy per particle: ",av_E / natoms)
 end
 run_dynamics(atoms,dt,T,n,nsteps,natoms)
 
