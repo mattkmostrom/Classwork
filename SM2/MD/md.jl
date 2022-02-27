@@ -7,7 +7,7 @@ using Plots
 using Random
 
 println("________________________\n\n")
-println("Morse Potential MD v1.0\n")
+println("Morse Potential MD v1.1\n")
 println("")
 
 global type = "LJ"           #Potential type: "LJ" or "morse" or "harmonic"
@@ -16,13 +16,13 @@ global n = 4                 #cube root of the number of atoms to be simulated
 #****************************
 #Set some constants and make the units correct
 #****************************
-Tstar = 1.24              #Temperature
-rhostar = 0.6             #density
+Tstar = 1.64              #Temperature
+rhostar = 0.9             #density
 massstar = 39.9             #twisting your mind and smashing your dreams
 
 eps = 119.8                 #well-depth; in units of eps/kb, so T will just be Tstar * eps
 sig = 3.405                 #place where E = 0, NOT x corresponding to bottom of well
-w = 1.                      #arbitrary potential-specific parameter; harmonic freq, morse alpha, etc. alpha is well width; bigger alpha means gentler sloped well. "bond stiffness"
+w = 1.                      #arbitrary potential-specific parameter: harmonic freq, morse alpha, etc. alpha is well width; bigger alpha means gentler sloped well. "bond stiffness"
 
 T = Tstar * eps
 mass = massstar * (10. / (6.022169 / 1.380662)) #KPsa
@@ -30,8 +30,8 @@ rho = rhostar / (sig^3)
 
 time_star = mass * (sig * sig / eps)      #this block is just making the 
 time = 100 * time_star                    #units what they should be in the paper
-global dt = 0.005 * time_star
-global nsteps = round(time / dt)    #number of integration points
+global dt = 0.5 * 0.005 * time_star
+global nsteps = 3 * round(time / dt)    #number of integration points
 global natoms = 32
 global cell = (natoms / rho) ^ (1. / 3.)    #Cell size reduced units
 global dx = cell/n           #spacing between adjacent atoms in cube
@@ -333,7 +333,7 @@ function get_energy(atoms)
 
         end #type if
         
-        PE += U - ecut              
+        PE += U #- ecut              
 
       elseif dr2 > cutoff2
         U = 0.
@@ -464,17 +464,30 @@ function run_dynamics(atoms,dt,T,n,nsteps,natoms)
       temper(atoms,T)
     end
 
-    prefactor = pi * size(atoms,1) * rhostar * cutoff^(-3)
-    lrc = ((8/9) - (8/3)) * prefactor #from some paper brian linked
-
     if q !=0 && q >= (nsteps/4)           #collecting energy averaging after
       av_E += PE                          #thermostat turns off
     end                                   
 
     if q == nsteps                        
-      av_E = av_E / (nsteps-(nsteps/4))         
-      av_E = (av_E + lrc) / eps           #getting the units right. There's
-    end                                   #a 1/k_b in there too, but it = 1
+      av_E = av_E / (nsteps-((nsteps/4)))   #divide only by steps that we used to add them up 
+      av_E /= eps
+      println("Av. red. energy: ",av_E)
+
+      sigorcut= sig/cutoff
+      lrc = 8. /3. * eps * pi * natoms
+      lrc *= rhostar * (1. /3. * sigorcut^9 - sigorcut^3)
+
+      #prefactor = pi * size(atoms,1) * rhostar
+      #lrc = (8/9)*prefactor*(cutoff/sig)^(-9) - (8/3)*prefactor*(cutoff/sig)^(-3) #from some paper brian linked        
+      
+      println("lrc: ",lrc)
+      println("lrc per particle: ",lrc/natoms)
+      lrc /= eps
+      println("reduced lrc: ",lrc)
+      println("reduced lrc per particle: ",lrc/natoms)
+      av_E = av_E + lrc
+      println("\n\n")
+    end                                   
 
     for i in 1:size(atoms,1)                                    #this is the same as what's in temper()
       itemp += atoms[i].mass * dot(atoms[i].vel,atoms[i].vel)   #it's just here because julia is difficult 
@@ -489,7 +502,7 @@ function run_dynamics(atoms,dt,T,n,nsteps,natoms)
       end                                 #so you might need to write it out yourself
     end
 
-    println("Steps completed:",q,"/",nsteps,", Energy: ",energy,", Temperature: ",itemp)
+    println("Steps completed:",q,"/",nsteps,", Total Energy: ",energy,", Temperature: ",itemp)
   end
   println("\nAverage Energy: ",av_E)
   println("Average Energy per particle: ",av_E / natoms)
